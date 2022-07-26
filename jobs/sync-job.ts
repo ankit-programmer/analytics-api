@@ -17,7 +17,7 @@ const REPORT_DATA_COLLECTION = process.env.REPORT_DATA_COLLECTION || '';
 const DELAY_INTERVAL = 30 * 1000; // in secs
 const MONGO_DOCS_LIMIT = 10000;
 const BATCH_SIZE = 1000;
-const LAG = 48 * 60;  // Hours * Minutes
+const LAG = 15;  // Minutes
 
 async function initSynching(job: jobType) {
     logger.info(`MONGO_DOCS_LIMIT: ${MONGO_DOCS_LIMIT} | BATCH_SIZE: ${BATCH_SIZE} | DELAY_INTERVAL: ${DELAY_INTERVAL}`);
@@ -83,7 +83,10 @@ async function fetchDocsFromMongo(job: jobType): Promise<any[]> {
 function fetchRequestDataDocs(maxEndTime: DateTime, lastDocumentId: string) {
     const query = {
         _id: { $gt: new ObjectId(lastDocumentId) },
-        requestDate: { $lte: maxEndTime }
+        $or: [
+            { isSingleRequest: { $ne: 1 }, requestDate: { $lte: maxEndTime } },
+            { isSingleRequest: 1, reportStatus: { $in: [1, 2] }, sentTimeReport: { $lte: maxEndTime } }
+        ]
     }
 
     logger.info(`[MONGO] Fetching docs...`);
@@ -95,6 +98,7 @@ function fetchRequestDataDocs(maxEndTime: DateTime, lastDocumentId: string) {
 function fetchReportDataDocs(maxEndTime: DateTime, lastDocumentId: string) {
     const query = {
         _id: { $gt: new ObjectId(lastDocumentId) },
+        status: { $in: [1, 2] },
         sentTime: { $lte: maxEndTime }
     }
 
