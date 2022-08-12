@@ -37,6 +37,6 @@ export default class Download {
         this.endDate = endDate;
         this.query = query;
         if (timezone) this.timezone = timezone;
-        if (fields && fields.length) this.fields = fields.split(',');
+        if (fields && fields.length) this.fields = fields.splitAndTrim(',');
     }
 }

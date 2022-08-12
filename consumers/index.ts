@@ -1,13 +1,15 @@
 import "../startup/dotenv";
 import logger from "./../logger/logger";
 import { has } from 'lodash';
-import { dlrLogsConsumer } from './dlr-logs-consumer';
-import { dlrLogDetailsConsumer } from './dlr-log-details-consumer';
+import { mailRequestsConsumer } from './mail-requests-consumer';
+import { mailReportsConsumer } from './mail-reports-consumer';
+import { mailEventsConsumer } from './mail-events-consumer';
 
 // Register your consumers here
 const Consumers: any = {
-    dlrLogsConsumer,
-    dlrLogDetailsConsumer
+    mailRequestsConsumer,
+    mailReportsConsumer,
+    mailEventsConsumer
 };
 
 function invalidConsumerName(consumerName: string): Boolean {

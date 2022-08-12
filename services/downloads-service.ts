@@ -2,7 +2,7 @@ import { CollectionReference } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import logger from '../logger/logger';
 import Download, { RESOURCE_TYPE } from '../models/download.model';
-import dlrLogsService from './email/dlr-logs-service';
+import mailRequestsService from './email/mail-requests-service';
 import reportDataService from './sms/report-data-service';
 
 const DOWNLOADS_COLLECTION = process.env.DOWNLOADS_COLLECTION || 'downloads'
@@ -50,7 +50,7 @@ class DownloadsFsService {
     public createJob(download: Download) {
         switch (download.resourceType) {
             case RESOURCE_TYPE.EMAIL:
-                return dlrLogsService.download(download);
+                return mailRequestsService.download(download);
             default:
                 return reportDataService.download(download);
         }

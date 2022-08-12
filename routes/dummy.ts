@@ -3,14 +3,14 @@ import logger from "../logger/logger";
 
 const router = express.Router();
 
-router.get("/", async (req: Request, res: Response) => {
+router.post("/", async (req: Request, res: Response) => {
     try {
-        return res.send({ info: 'test' });
+        const result: any = req.body.data.splitAndTrim(',');
+        return res.send(result);
     } catch (err) {
         logger.error(err);
+        return res.status(500).send(err);
     }
-
-    res.status(500).send('Something went wrong');
 });
 
 export default router;

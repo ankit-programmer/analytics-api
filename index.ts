@@ -3,6 +3,7 @@ import "./startup/dotenv";
 import logger from "./logger/logger";
 import helmet from './startup/helmet';
 import cors from './startup/cors';
+import './startup/string.extensions';
 import responseTime from './startup/response-time';
 import routes from './startup/routes';
 import sequelize from './database/sequelize-service';

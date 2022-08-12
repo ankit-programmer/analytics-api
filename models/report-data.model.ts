@@ -1,27 +1,31 @@
+import { extractCountryCode } from "../services/utility-service";
+
 export default class ReportData {
-    '_id': string;
-    'requestID': string;
-    'telNum': string;
-    'status': number;
-    'sentTime': Date;
-    'providerSMSID': string;
-    'user_pid': string;
-    'senderID': string;
-    'smsc': string;
-    'deliveryTime': Date;
-    'route': string;
-    'credit': number;
-    'retryCount': number;
-    'sentTimePeriod': Date;
-    'crcy': string;
-    'node_id': string;
-    'oppri': number;
-    'isSingleRequest': string;
+    _id: string;
+    requestID: string;
+    telNum: string;
+    countryCode: string;
+    status: number;
+    sentTime: Date;
+    providerSMSID: string;
+    user_pid: string;
+    senderID: string;
+    smsc: string;
+    deliveryTime: Date;
+    route: string;
+    credit: number;
+    retryCount: number;
+    sentTimePeriod: Date;
+    crcy: string;
+    node_id: string;
+    oppri: number;
+    isSingleRequest: string;
 
     constructor(attr: any) {
-        this._id = attr['_id'].toString();
+        this._id = attr['_id']?.toString();
         this.requestID = attr['requestID'];
         this.telNum = attr['telNum'];
+        this.countryCode = extractCountryCode(this.telNum)?.countryCode || '0';
         this.status = parseInt(attr['status']);
         this.sentTime = attr['sentTime'] || null;
         this.providerSMSID = attr['providerSMSID'];
