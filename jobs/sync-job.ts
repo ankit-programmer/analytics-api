@@ -3,13 +3,10 @@ import firebaseLogger from '../logger/firebase-logger';
 import { MongoClient, ObjectId } from 'mongodb';
 import mongoService from '../database/mongo-service';
 import { delay } from "../services/utility-service";
-import * as trackersService from "../services/sms/trackers-service";
 import { DateTime } from 'luxon';
-import requestDataService from "../services/sms/request-data-service";
-import reportDataService from "../services/sms/report-data-service";
 import ReportData from '../models/report-data.model';
 import RequestData from '../models/request-data.model';
-import { jobType } from "../models/trackers.model";
+import Tracker, { jobType } from "../models/trackers.model";
 
 let mongoConnection: MongoClient;
 const REQUEST_DATA_COLLECTION = process.env.REQUEST_DATA_COLLECTION || '';
@@ -46,9 +43,10 @@ async function syncDataToBigQuery(job: jobType, mongoDocs: any[]) {
         logger.info(`[BATCH PROCESSING] ${i}-${(i + BATCH_SIZE) - 1} records synching to big query...`);
         await insertBatchInBigQuery(job, batch);
         logger.info('[BATCH PROCESSING] Batch synched.');
-        const lastDocId = batch.pop()?._id?.toString();
+        const lastDocumentId = batch.pop()?._id?.toString();
 
-        await trackersService.upsert(job, lastDocId).catch(err => {
+        logger.info(`[UPDATE TRACKERS] Updating lastDocumentId to ${lastDocumentId}...`);
+        await Tracker.upsert({ jobType: job, lastDocumentId }).catch(err => {
             logger.error(err);
             process.exit(1);
         });
@@ -57,8 +55,8 @@ async function syncDataToBigQuery(job: jobType, mongoDocs: any[]) {
 
 async function insertBatchInBigQuery(job: jobType, batch: any[]) {
     try {
-        if (job === jobType.REQUEST_DATA) await requestDataService.insertMany(batch.map(doc => new RequestData(doc)));
-        if (job === jobType.REPORT_DATA) await reportDataService.insertMany(batch.map(doc => new ReportData(doc)));
+        if (job === jobType.REQUEST_DATA) await RequestData.insertMany(batch.map(doc => new RequestData(doc)));
+        if (job === jobType.REPORT_DATA) await ReportData.insertMany(batch.map(doc => new ReportData(doc)));
     } catch (err: any) {
         if (err.name !== 'PartialFailureError') throw err;
         logger.error(`[JOB](insertBatchInBigQuery) PartialFailureError`);
@@ -69,7 +67,7 @@ async function insertBatchInBigQuery(job: jobType, batch: any[]) {
 
 async function fetchDocsFromMongo(job: jobType): Promise<any[]> {
     try {
-        const tracker: any = await trackersService.get(job);
+        const tracker: any = await Tracker.findByPk(job);
         if (!tracker?.lastDocumentId) throw 'lastDocumentId is required.';
         if (job === jobType.REQUEST_DATA) return fetchRequestDataDocs(maxEndTime(), tracker.lastDocumentId);
         if (job === jobType.REPORT_DATA) return fetchReportDataDocs(maxEndTime(), tracker.lastDocumentId);
@@ -114,8 +112,10 @@ function maxEndTime() {
 
 function initTrackers(job: jobType, lastDocumentId: string, forceReplace: boolean) {
     if (!lastDocumentId) return;
-    if (forceReplace) return trackersService.upsert(job, lastDocumentId);
-    return trackersService.create(job, lastDocumentId);
+    logger.info(`[UPDATE TRACKERS] Updating lastDocumentId to ${lastDocumentId}...`);
+    if (forceReplace) return Tracker.upsert({ jobType: job, lastDocumentId });
+    logger.info(`[INIT TRACKERS] Updating lastDocumentId to ${lastDocumentId}...`);
+    return Tracker.create({ jobType: job, lastDocumentId });
 }
 
 async function start(job: jobType, args: any) {

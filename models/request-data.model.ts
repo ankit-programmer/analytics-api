@@ -1,3 +1,9 @@
+import { Table } from '@google-cloud/bigquery';
+import msg91Dataset from '../database/big-query-service';
+
+export const REQUEST_DATA_TABLE_ID = process.env.REQUEST_DATA_TABLE_ID || 'request_data'
+const requestDataTable: Table = msg91Dataset.table(REQUEST_DATA_TABLE_ID);
+
 export default class RequestData {
     _id: string;
     requestID: string;
@@ -27,7 +33,7 @@ export default class RequestData {
     crcy: string;
     node_id: string;
     scheduleDateTime: Date;
-    msgData: string
+    msgData: string;
 
     constructor(attr: any) {
         this._id = attr['_id'].toString();
@@ -59,5 +65,10 @@ export default class RequestData {
         this.node_id = attr['node_id'];
         this.scheduleDateTime = attr['scheduleDateTime'] || null;
         this.msgData = attr['msgData'];
+    }
+
+    public static insertMany(rows: Array<RequestData>) {
+        const insertOptions = { skipInvalidRows: true, ignoreUnknownValues: true };
+        return requestDataTable.insert(rows, insertOptions);
     }
 }

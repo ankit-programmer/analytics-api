@@ -1,28 +1,25 @@
 import express, { Request, Response } from 'express';
-import bigquery from '../database/big-query-service';
-import { getDefaultDate } from '../utility';
+import bigquery, { getQueryResults, MSG91_PROJECT_ID, MSG91_DATASET_ID } from '../database/big-query-service';
 import { DateTime } from 'luxon';
 import logger from "../logger/logger";
-import smsService from "../services/sms/sms-service";
-import { formatDate, getQuotedStrings } from '../services/utility-service';
+import smsAnalyticsService from "../services/sms/sms-analytics-service";
+import { formatDate, getDefaultDate, getQuotedStrings } from '../services/utility-service';
+import { REQUEST_DATA_TABLE_ID } from '../models/request-data.model';
+import { REPORT_DATA_TABLE_ID } from '../models/report-data.model';
 
 const router = express.Router();
 const reportQueryMap = new Map();
 const requestQueryMap = new Map();
-const PROJECT_ID = process.env.GCP_PROJECT_ID;
-const DATA_SET = process.env.MSG91_DATASET_ID;
-const REQUEST_TABLE = process.env.REQUEST_DATA_TABLE_ID;
-const REPORT_TABLE = process.env.REPORT_DATA_TABLE_ID;
 
 router.route(`/`)
     .get(async (req: Request, res: Response) => {
         try {
             const params = { ...req.query, ...req.params } as any;
-            let { companyId, vendorIds, route, timeZone, groupBy, startDate = getDefaultDate().end, endDate = getDefaultDate().start } = params;
+            let { companyId, vendorIds, route, timeZone, groupBy, startDate = getDefaultDate().from, endDate = getDefaultDate().to } = params;
             if (!companyId && !vendorIds) throw "vendorIds or companyId is required";
             const fromDate = formatDate(startDate);
             const toDate = formatDate(endDate);
-            if (companyId) return res.send(await smsService.getCompanyAnalytics(companyId, fromDate, toDate, timeZone, params, groupBy));
+            if (companyId) return res.send(await smsAnalyticsService.getAnalytics(companyId, fromDate, toDate, timeZone, params, groupBy));
             if (vendorIds) return res.send(await getVendorAnalytics(vendorIds.splitAndTrim(','), fromDate, toDate, route));
         } catch (error) {
             logger.error(error);
@@ -32,7 +29,7 @@ router.route(`/`)
 
 router.route("/vendors")
     .get(async (req: Request, res: Response) => {
-        let { companyId, nodeIds, vendorIds, route, startDate = getDefaultDate().end, endDate = getDefaultDate().start, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
+        let { companyId, nodeIds, vendorIds, route, startDate = getDefaultDate().from, endDate = getDefaultDate().to, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
         (!vendorIds) ? vendorIds = [] : vendorIds = vendorIds.splitAndTrim(',');
         return res.send(await getVendorAnalytics(vendorIds, startDate, endDate, route));
     });
@@ -55,8 +52,8 @@ async function getCompanyAnalyticsOld(companyId: string, startDate: DateTime, en
     COUNTIF(report.status = 17) as Blocked, 
     COUNTIF(report.status = 7) as AutoFailed,
     COUNTIF(report.status = 25 OR report.status = 16) as Rejected,
-    ROUND(SUM(IF(report.status = 1,TIMESTAMP_DIFF(report.deliveryTime, report.sentTime, SECOND),NULL))/COUNTIF(report.status = 1),0) as DeliveryTime FROM \`${PROJECT_ID}.${DATA_SET}.${REPORT_TABLE}\` AS report
-    INNER JOIN \`${PROJECT_ID}.${DATA_SET}.${REQUEST_TABLE}\` AS request
+    ROUND(SUM(IF(report.status = 1,TIMESTAMP_DIFF(report.deliveryTime, report.sentTime, SECOND),NULL))/COUNTIF(report.status = 1),0) as DeliveryTime FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REPORT_DATA_TABLE_ID}\` AS report
+    INNER JOIN \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REQUEST_DATA_TABLE_ID}\` AS request
     ON report.requestID = request._id
     WHERE (report.sentTime BETWEEN "${startDate.toFormat('yyyy-MM-dd')}" AND "${endDate.plus({ days: 3 }).toFormat('yyyy-MM-dd')}") 
     AND (DATETIME(request.requestDate,"${timeZone}") BETWEEN DATETIME("${startDate.toFormat('yyyy-MM-dd')}","${timeZone}") AND DATETIME("${endDate.toFormat('yyyy-MM-dd')}","${timeZone}"))
@@ -64,7 +61,7 @@ async function getCompanyAnalyticsOld(companyId: string, startDate: DateTime, en
     ${route != null ? `AND request.curRoute = "${route}"` : ""}
     GROUP BY DATE(request.requestDate),report.user_pid;`
     console.log(query);
-    let result = await runQuery(query);
+    let result = await getQueryResults(query);
     result = result.map(row => {
         row['Date'] = row['Date']?.value;
         return row;
@@ -109,35 +106,20 @@ async function getVendorAnalytics(vendors: string[], startDate: DateTime, endDat
     COUNTIF(status = 7) as AutoFailed,
     COUNTIF(status = 25 OR status = 16) as Rejected,
     ROUND(SUM(IF(status = 1,TIMESTAMP_DIFF(deliveryTime, sentTime, SECOND),NULL))/COUNTIF(status = 1),0) as DeliveryTime
-    FROM \`${PROJECT_ID}.${DATA_SET}.${REPORT_TABLE}\`
+    FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REPORT_DATA_TABLE_ID}\`
     WHERE (sentTime BETWEEN "${startDate}" AND "${endDate}")
     ${vendors.length > 0 ? "AND smsc IN (" + getQuotedStrings(vendors) + ")" : ""}
     ${route ? "AND route = " + route : ""}
     GROUP BY Date, smsc
     ORDER BY Date;`
-    return { data: await runQuery(query) };
-}
-
-export async function runQuery(query: string) {
-    try {
-        const [job] = await bigquery.createQueryJob({
-            query: query,
-            location: process.env.DATA_SET_LOCATION,
-            // maximumBytesBilled: "1000"
-        });
-        let [rows] = await job.getQueryResults();
-        return rows;
-    } catch (error) {
-        throw error;
-    }
-
+    return { data: await getQueryResults(query) };
 }
 
 // Old Version
 
 router.route('/users/:userId')
     .get(async (req: Request, res: Response) => {
-        let { userId = 100079, startDate = getDefaultDate().end, endDate = getDefaultDate().start, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
+        let { userId = 100079, startDate = getDefaultDate().from, endDate = getDefaultDate().to, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
         if (!isValidInterval(interval)) {
             res.status(400).send({
                 message: "Invalid interval provided",
@@ -170,7 +152,7 @@ router.route('/users/:userId')
 
         if (userId) {
             // Handle request for company Id
-            return res.send(await smsService.getCompanyAnalytics(userId, startDate, endDate));
+            return res.send(await smsAnalyticsService.getAnalytics(userId, startDate, endDate));
         }
         // const [reportDataJob] = await bigquery.createQueryJob({
         //     query: reportDataQuery,
@@ -231,7 +213,7 @@ router.route('/users/:userId')
 
 router.route('/users/:userId/campaigns/:campaignId')
     .get(async (req: Request, res: Response) => {
-        const { userId, campaignId, startDate = getDefaultDate().start, endDate = getDefaultDate().end } = { ...req.query, ...req.params } as any;
+        const { userId, campaignId, startDate = getDefaultDate().to, endDate = getDefaultDate().from } = { ...req.query, ...req.params } as any;
         const query = `SELECT DATE(requestDate) as Date,
         user_pid as Company, 
         campaign_pid as Campaign,
@@ -244,7 +226,7 @@ router.route('/users/:userId/campaigns/:campaignId')
         COUNTIF(reportStatus = 7) as AutoFailed,
         COUNTIF(reportStatus = 25) as Rejected,
         ROUND(SUM(IF(reportStatus = 1,TIMESTAMP_DIFF(deliveryTime, requestDate, SECOND),NULL))/COUNTIF(reportStatus = 1),0) as DeliveryTime
-        FROM \`${PROJECT_ID}.${DATA_SET}.${REQUEST_TABLE}\`
+        FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REQUEST_DATA_TABLE_ID}\`
         WHERE (requestDate BETWEEN "${startDate}" AND "${endDate}") AND user_pid = "${userId}" AND campaign_pid = "${campaignId}"
         GROUP BY DATE(requestDate), user_pid, campaign_pid;`;
         const [job] = await bigquery.createQueryJob({
@@ -261,7 +243,7 @@ router.route('/users/:userId/campaigns/:campaignId')
     });
 router.route('/users/:userId/campaigns')
     .get(async (req: Request, res: Response) => {
-        const { userId, campaignId, startDate = getDefaultDate().start, endDate = getDefaultDate().end } = { ...req.query, ...req.params } as any;
+        const { userId, campaignId, startDate = getDefaultDate().to, endDate = getDefaultDate().from } = { ...req.query, ...req.params } as any;
         const query = `SELECT DATE(requestDate) as Date,
         user_pid as Company, 
         campaign_pid as Campaign,
@@ -274,7 +256,7 @@ router.route('/users/:userId/campaigns')
         COUNTIF(reportStatus = 7) as AutoFailed,
         COUNTIF(reportStatus = 25) as Rejected,
         ROUND(SUM(IF(reportStatus = 1,TIMESTAMP_DIFF(deliveryTime, requestDate, SECOND),NULL))/COUNTIF(reportStatus = 1),0) as DeliveryTime
-        FROM \`${PROJECT_ID}.${DATA_SET}.${REQUEST_TABLE}\`
+        FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REQUEST_DATA_TABLE_ID}\`
         WHERE (requestDate BETWEEN "${startDate}" AND "${endDate}") AND user_pid = "${userId}"
         GROUP BY DATE(requestDate), user_pid, campaign_pid;`;
         const [job] = await bigquery.createQueryJob({
@@ -291,7 +273,7 @@ router.route('/users/:userId/campaigns')
     });
 router.route('/vendors')
     .get(async (req: Request, res: Response) => {
-        let { id, startDate = getDefaultDate().end, endDate = getDefaultDate().start, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
+        let { id, startDate = getDefaultDate().from, endDate = getDefaultDate().to, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
         const reportQuery = `SELECT DATE(sentTime) as Date, smsc as SMSC, COUNT(_id) as Total,
         SUM(credit) as BalanceDeducted, 
         COUNTIF(status = 1) as Delivered, 
@@ -302,7 +284,7 @@ router.route('/vendors')
         COUNTIF(status = 7) as AutoFailed,
         COUNTIF(status = 25) as Rejected,
         ROUND(SUM(IF(status = 1,TIMESTAMP_DIFF(deliveryTime, sentTime, SECOND),NULL))/COUNTIF(status = 1),0) as DeliveryTime
-        FROM \`${PROJECT_ID}.${DATA_SET}.${REPORT_TABLE}\`
+        FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REPORT_DATA_TABLE_ID}\`
         WHERE (sentTime BETWEEN "${startDate}" AND "${endDate}")
         GROUP BY DATE(sentTime), smsc;`
         const requestQuery = `SELECT DATE(requestDate) as Date, smsc as SMSC, COUNT(_id) as Total,
@@ -315,7 +297,7 @@ router.route('/vendors')
         COUNTIF(reportStatus = 7) as AutoFailed,
         COUNTIF(reportStatus = 25) as Rejected,
         ROUND(SUM(IF(reportStatus = 1,TIMESTAMP_DIFF(deliveryTime, requestDate, SECOND),NULL))/COUNTIF(reportStatus = 1),0) as DeliveryTime
-        FROM \`${PROJECT_ID}.${DATA_SET}.${REQUEST_TABLE}\`
+        FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REQUEST_DATA_TABLE_ID}\`
         WHERE (requestDate BETWEEN "${startDate}" AND "${endDate}") AND isSingleRequest = "1"
         GROUP BY DATE(requestDate), smsc;`
         // return;
@@ -349,11 +331,11 @@ router.route('/vendors')
     })
 router.route('/profit')
     .get(async (req: Request, res: Response) => {
-        let { id, startDate = getDefaultDate().end, endDate = getDefaultDate().start, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
+        let { id, startDate = getDefaultDate().from, endDate = getDefaultDate().to, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
         const query = `SELECT DATE(sentTime) as Date, crcy as Currency, SUM(credit) as Credit,
         SUM(oppri) as Cost,
         (SUM(credit) - SUM(oppri)) as Profit
-        FROM \`${PROJECT_ID}.${DATA_SET}.${REPORT_TABLE}\`
+        FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REPORT_DATA_TABLE_ID}\`
         WHERE (sentTime BETWEEN "${startDate}" AND "${endDate}")
         GROUP BY DATE(sentTime), crcy;`
         const [job] = await bigquery.createQueryJob({
@@ -371,11 +353,11 @@ router.route('/profit')
     });
 router.route('/profit/users/:userId')
     .get(async (req: Request, res: Response) => {
-        let { userId, startDate = getDefaultDate().end, endDate = getDefaultDate().start, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
+        let { userId, startDate = getDefaultDate().from, endDate = getDefaultDate().to, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
         const query = `SELECT DATE(sentTime) as Date, user_pid as Company, SUM(credit) as Credit,
         SUM(oppri) as Cost,
         (SUM(credit) - SUM(oppri)) as Profit
-        FROM \`${PROJECT_ID}.${DATA_SET}.${REPORT_TABLE}\`
+        FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REPORT_DATA_TABLE_ID}\`
         WHERE (sentTime BETWEEN "${startDate}" AND "${endDate}") AND user_pid = "${userId}"
         GROUP BY DATE(sentTime), user_pid;`
         const [job] = await bigquery.createQueryJob({
@@ -393,13 +375,13 @@ router.route('/profit/users/:userId')
     });
 router.route('/profit/vendors')
     .get(async (req: Request, res: Response) => {
-        let { userId, startDate = getDefaultDate().end, endDate = getDefaultDate().start, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
+        let { userId, startDate = getDefaultDate().from, endDate = getDefaultDate().to, interval = INTERVAL.DAILY } = { ...req.query, ...req.params } as any;
         const query = `SELECT DATE(sentTime) as Date, smsc as Vendor,
         crcy as Currency,
         SUM(credit) as Credit,
         SUM(oppri) as Cost,
         (SUM(credit) - SUM(oppri)) as Profit
-        FROM \`${PROJECT_ID}.${DATA_SET}.${REPORT_TABLE}\`
+        FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REPORT_DATA_TABLE_ID}\`
         WHERE (sentTime BETWEEN "${startDate}" AND "${endDate}")
         GROUP BY DATE(sentTime), smsc, crcy;`
         const [job] = await bigquery.createQueryJob({
@@ -509,7 +491,7 @@ COUNTIF(status = 17) as Blocked,
 COUNTIF(status = 7) as AutoFailed,
 COUNTIF(status = 25) as Rejected,
 ROUND(SUM(IF(status = 1,TIMESTAMP_DIFF(deliveryTime, sentTime, SECOND),NULL))/COUNTIF(status = 1),0) as DeliveryTime
-FROM \`${PROJECT_ID}.${DATA_SET}.${REPORT_TABLE}\`
+FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REPORT_DATA_TABLE_ID}\`
 WHERE (sentTime BETWEEN "{startDate}" AND "{endDate}") AND
 user_pid = "{userId}"
 GROUP BY DATE(sentTime), user_pid;`);
@@ -525,7 +507,7 @@ COUNTIF(reportStatus = 17) as Blocked,
 COUNTIF(reportStatus = 7) as AutoFailed,
 COUNTIF(reportStatus = 25) as Rejected,
 ROUND(SUM(IF(reportStatus = 1,TIMESTAMP_DIFF(deliveryTime, requestDate, SECOND),NULL))/COUNTIF(reportStatus = 1),0) as DeliveryTime
-FROM \`${PROJECT_ID}.${DATA_SET}.${REQUEST_TABLE}\`
+FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REQUEST_DATA_TABLE_ID}\`
 WHERE (requestDate BETWEEN "{startDate}" AND "{endDate}") AND isSingleRequest = "1" AND
 user_pid = "{userId}"
 GROUP BY DATE(requestDate), user_pid;`)

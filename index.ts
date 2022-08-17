@@ -5,7 +5,7 @@ import helmet from './startup/helmet';
 import cors from './startup/cors';
 import './startup/string.extensions';
 import responseTime from './startup/response-time';
-import routes from './startup/routes';
+import routes from './apis';
 import sequelize from './database/sequelize-service';
 
 const app = express();

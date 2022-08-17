@@ -4,11 +4,9 @@ import { MongoClient } from 'mongodb';
 import logger from "../../logger/logger";
 import fs from 'fs';
 import { DateTime } from 'luxon';
-import requestDataService from '../../services/sms/request-data-service';
 import { delay } from '../../services/utility-service';
 import { dirname } from 'path';
 import RequestData from '../../models/request-data.model';
-import reportDataService from '../../services/sms/report-data-service';
 import ReportData from '../../models/report-data.model';
 
 const appDir = dirname(require.main?.filename || '');
@@ -109,10 +107,10 @@ async function syncData(collection: any, startTime: DateTime, endTime: DateTime,
                 }
             })
             if (reportData.length > 0) {
-                const insertReport = reportDataService.insertMany(reportData);
+                const insertReport = ReportData.insertMany(reportData);
                 tasks.push(insertReport);
             }
-            const insertRequest = requestDataService.insertMany(requestData);
+            const insertRequest = RequestData.insertMany(requestData);
             tasks.push(insertRequest);
             await Promise.all(tasks);
             batch = [];

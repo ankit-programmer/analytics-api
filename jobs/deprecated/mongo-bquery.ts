@@ -4,11 +4,9 @@ import { MongoClient } from 'mongodb';
 import logger from "../../logger/logger";
 import fs from 'fs';
 import { DateTime } from 'luxon';
-import reportDataService from '../../services/sms/report-data-service';
 import { delay } from '../../services/utility-service';
 import { dirname } from 'path';
 import ReportData from '../../models/report-data.model';
-import requestDataService from '../../services/sms/request-data-service';
 
 const appDir = dirname(require.main?.filename || '');
 const BATCH_SIZE = 1000;
@@ -98,7 +96,7 @@ async function syncData(collection: any, startTime: DateTime, endTime: DateTime,
         batch.push(new ReportData(doc));
 
         if (batch.length > 0 && (batch.length >= BATCH_SIZE || i == (docs.length - 1))) {
-            await reportDataService.insertMany(batch);
+            await ReportData.insertMany(batch);
             batch = [];
         } else {
             continue;
@@ -117,13 +115,6 @@ async function syncData(collection: any, startTime: DateTime, endTime: DateTime,
             logger.error(error);
             break;
         }
-        // await reportDataService.insertMany([reportDataService.prepareDocument(doc)]);
-        // // Update the pointer to the last processed document
-        // let timestamp = DateTime.fromJSDate(doc.sentTime);
-        // if (timestamp?.isValid) {
-        //     output.timestamp = timestamp;
-        // }
-        // output.documentId = doc["_id"]?.toString();
     }
     return output;
 }

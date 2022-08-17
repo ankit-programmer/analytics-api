@@ -1,4 +1,9 @@
 import { getHashCode } from "../services/utility-service";
+import { Table } from '@google-cloud/bigquery';
+import msg91Dataset from '../database/big-query-service';
+
+const MAIL_EVENTS_TABLE_ID = process.env.MAIL_EVENTS_TABLE_ID || 'mail_event';
+const mailEventsTable: Table = msg91Dataset.table(MAIL_EVENTS_TABLE_ID);
 
 export default class MailEvent {
     requestId: string; //requestId of the mail. (Not unique in this table)	
@@ -19,5 +24,10 @@ export default class MailEvent {
         this.companyId = attr['cid'];
         this.requestTime = attr['mct'] && new Date(attr['mct']);
         this.createdAt = attr['created_at'] && new Date(attr['created_at']);
+    }
+
+    public static insertMany(rows: Array<MailEvent>) {
+        const insertOptions = { skipInvalidRows: true, ignoreUnknownValues: true };
+        return mailEventsTable.insert(rows, insertOptions);
     }
 }

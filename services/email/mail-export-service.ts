@@ -1,16 +1,8 @@
-import { Table } from '@google-cloud/bigquery';
-import msg91Dataset from '../../database/big-query-service';
-import logger from '../../logger/logger';
-import MailRequest from '../../models/mail-request.model';
 import Download from '../../models/download.model';
-import downloadsService from '../downloads-service';
+import { MAIL_REP_TABLE_ID } from '../../models/mail-report.model';
+import { MAIL_REQ_TABLE_ID } from '../../models/mail-request.model';
 import { getQuotedStrings, getValidFields } from '../utility-service';
-import { MAIL_REP_TABLE_ID } from './mail-reports-service';
 
-const MAIL_REQ_TABLE_ID = process.env.MAIL_REQ_TABLE_ID || 'mail_request'
-const GCS_BASE_URL = process.env.GCS_BASE_URL || 'https://storage.googleapis.com';
-const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'msg91-analytics';
-const GCS_FOLDER_NAME = process.env.GCS_EMAIL_EXPORTS_FOLDER || 'email-exports';
 const PERMITTED_FIELDS: { [key: string]: string } = {
     // Mail Request
     companyId: 'mailRequest.companyId',
@@ -38,33 +30,17 @@ const PERMITTED_FIELDS: { [key: string]: string } = {
     hostname: 'mailReport.hostname'
 };
 
-class MailRequestsService {
-    private static instance: MailRequestsService;
-    private mailRequestTable: Table;
+class MailExportService {
+    private static instance: MailExportService;
 
-    constructor() {
-        this.mailRequestTable = msg91Dataset.table(MAIL_REQ_TABLE_ID);
+    public static getSingletonInstance(): MailExportService {
+        return MailExportService.instance ||= new MailExportService();
     }
 
-    public static getSingletonInstance(): MailRequestsService {
-        return MailRequestsService.instance ||= new MailRequestsService();
-    }
-
-    public insertMany(rows: Array<MailRequest>) {
-        const insertOptions = { skipInvalidRows: true, ignoreUnknownValues: true };
-        return this.mailRequestTable.insert(rows, insertOptions);
-    }
-
-    public download(download: Download, format: string = 'CSV') {
-        logger.info('[DOWNLOAD] Creating job...');
-        const filePath = `${GCS_BUCKET_NAME}/${GCS_FOLDER_NAME}/${download.id}`;
-        const exportFilePath = `gs://${filePath}_ *.csv`;
-        download.file = `${GCS_BASE_URL}/${filePath}_%20000000000000.csv`;
+    public getQuery(download: Download) {
         const fields = getValidFields(PERMITTED_FIELDS, download.fields).withAlias.join(',');
         const whereClause = this.getWhereClause(download);
-        const queryStatement = `select ${fields} from ${MAIL_REQ_TABLE_ID} as mailRequest right join ${MAIL_REP_TABLE_ID} as mailReport ON mailRequest.requestId = mailReport.requestId WHERE ${whereClause}`;
-        logger.info(`Query: ${queryStatement}`);
-        return msg91Dataset.createQueryJob({ query: downloadsService.getExportQuery(download.id, queryStatement, exportFilePath, format) });
+        return `select ${fields} from ${MAIL_REQ_TABLE_ID} as mailRequest right join ${MAIL_REP_TABLE_ID} as mailReport ON mailRequest.requestId = mailReport.requestId WHERE ${whereClause}`;
     }
 
     private getWhereClause(download: Download) {
@@ -96,4 +72,4 @@ class MailRequestsService {
     }
 }
 
-export default MailRequestsService.getSingletonInstance();
+export default MailExportService.getSingletonInstance();

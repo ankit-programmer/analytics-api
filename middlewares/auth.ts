@@ -34,7 +34,9 @@ class Cache {
 }
 const cache = new Cache();
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
+    console.log(req.header("Authorization"));
     let token = req.header('Authorization')?.replace('Bearer ', '');
+    console.log(token);
     if (!token) {
         logger.error("Token not found");
         return res.status(401).send("Token not found");
@@ -42,7 +44,12 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     try {
         const secret = await getJWTSecret();
         const decoded: any = jwt.verify(token, secret);
-        req.query.companyId = decoded?.companyId as string;
+        let companyId = decoded?.companyId as string;
+        if (!companyId) {
+            companyId = decoded?.company?.id;
+        }
+        logger.info(`companyId : ${companyId}`);
+        req.query.companyId = companyId;
     } catch (error) {
         const email = await getFirebaseEmail(token);
         if (!email) {

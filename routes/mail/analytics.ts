@@ -1,18 +1,13 @@
 import express, { Request, Response } from 'express';
-import bigquery from '../../database/big-query-service';
-import { getDefaultDate } from '../../utility';
+import { getQueryResults, MSG91_PROJECT_ID, MSG91_DATASET_ID } from '../../database/big-query-service';
 import { DateTime } from 'luxon';
 import logger from "../../logger/logger";
-import { formatDate, getQuotedStrings, getValidFields } from '../../services/utility-service';
+import { formatDate, getDefaultDate, getQuotedStrings, getValidFields } from '../../services/utility-service';
+import { REQUEST_DATA_TABLE_ID } from '../../models/request-data.model';
+import { REPORT_DATA_TABLE_ID } from '../../models/report-data.model';
 
 const router = express.Router();
 const DEFAULT_TIMEZONE: string = '+05:30';
-const PROJECT_ID = process.env.GCP_PROJECT_ID;
-const DATA_SET = process.env.MSG91_DATASET_ID;
-const REQUEST_TABLE = process.env.MAIL_REQ_TABLE_ID;
-const REPORT_TABLE = process.env.MAIL_REP_TABLE_ID;
-const EVENT_TABLE = process.env.MAIL_EVENTS_TABLE_ID;
-const DEFAULT_GROUP_BY = 'Date';
 const PERMITTED_GROUPINGS: { [key: string]: string } = {
     // from report-data
     country: 'reportData.countryCode',
@@ -26,7 +21,7 @@ router.route(`/`)
     .get(async (req: Request, res: Response) => {
         try {
             const params = { ...req.query, ...req.params } as any;
-            let { companyId, vendorIds, startDate = getDefaultDate().end, endDate = getDefaultDate().start } = params;
+            let { companyId, vendorIds, startDate = getDefaultDate().from, endDate = getDefaultDate().to } = params;
             if (!companyId && !vendorIds) throw "vendorIds or companyId is required";
             const fromDate = formatDate(startDate);
             const toDate = formatDate(endDate);
@@ -56,7 +51,7 @@ async function getCompanyAnalytics(companyId: string, startDate: DateTime, endDa
   WHERE request.createdAt BETWEEN "${endDate}" AND "${endDate}" AND companyId = "${companyId}"
   GROUP BY Date
   ORDER BY Date;`
-    const data = await runQuery(query);
+    const data = await getQueryResults(query);
     return { data };
 }
 
@@ -68,30 +63,6 @@ async function getCompanyAnalytics(companyId: string, startDate: DateTime, endDa
 //     const total = calculateTotalAggr(data);
 //     return { data, total };
 // }
-
-
-
-
-export async function runQuery(query: string) {
-    try {
-        const [job] = await bigquery.createQueryJob({
-            query: query,
-            location: process.env.DATA_SET_LOCATION,
-            // maximumBytesBilled: "1000"
-        });
-        let [rows] = await job.getQueryResults();
-        return rows;
-    } catch (error) {
-        throw error;
-    }
-
-}
-
-
-
-
-
-
 
 export enum INTERVAL {
     // HOURLY = "hourly",
@@ -109,8 +80,8 @@ function getAnalyticsQuery(companyId: string, startDate: DateTime, endDate: Date
     const groupByAttribs = validFields.withAlias.join(',');
 
     const query = `SELECT ${groupByAttribs}, ${aggregateAttribs()}
-    FROM \`${PROJECT_ID}.${DATA_SET}.${REPORT_TABLE}\` AS reportData
-    INNER JOIN \`${PROJECT_ID}.${DATA_SET}.${REQUEST_TABLE}\` AS requestData
+    FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REPORT_DATA_TABLE_ID}\` AS reportData
+    INNER JOIN \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REQUEST_DATA_TABLE_ID}\` AS requestData
     ON reportData.requestID = requestData._id
     WHERE ${whereClause}
     GROUP BY ${groupBy}

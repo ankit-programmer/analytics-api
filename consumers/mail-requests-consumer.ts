@@ -1,7 +1,6 @@
 import rabbitmqService, { Connection, Channel } from '../database/rabbitmq-service';
 import logger from "../logger/logger";
 import MailRequest from '../models/mail-request.model';
-import mailRequestsService from "../services/email/mail-requests-service";
 
 const BUFFER_SIZE = parseInt(process.env.RABBIT_MAIL_REQ_BUFFER_SIZE || '50');
 const QUEUE_NAME = process.env.RABBIT_MAIL_REQ_QUEUE_NAME || 'email-request-logs';
@@ -44,7 +43,7 @@ async function processMsgs(msgs: any[]) {
     try {
         const mailRequests: Array<MailRequest> = [];
         msgs.map(msg => msg.map((mailReq: any) => mailRequests.push(new MailRequest(mailReq))));
-        if (mailRequests.length) await mailRequestsService.insertMany(mailRequests);
+        if (mailRequests.length) await MailRequest.insertMany(mailRequests);
     } catch (err: any) {
         if (err.name !== 'PartialFailureError') throw err;
         logger.error(`[CONSUMER](Mail Requests) PartialFailureError`);
