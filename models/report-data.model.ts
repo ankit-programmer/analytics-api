@@ -1,8 +1,7 @@
 import { Table } from '@google-cloud/bigquery';
-import msg91Dataset from '../database/big-query-service';
+import msg91Dataset, { REPORT_DATA_TABLE_ID } from '../database/big-query-service';
 import { extractCountryCode } from "../services/utility-service";
 
-export const REPORT_DATA_TABLE_ID = process.env.REPORT_DATA_TABLE_ID || 'report_data';
 const reportDataTable: Table = msg91Dataset.table(REPORT_DATA_TABLE_ID);
 export default class ReportData {
     _id: string;
@@ -29,7 +28,7 @@ export default class ReportData {
         this._id = attr['_id']?.toString();
         this.requestID = attr['requestID'];
         this.telNum = attr['telNum'];
-        this.countryCode = extractCountryCode(this.telNum)?.regionCode || 'UNKNOWN';
+        this.countryCode = extractCountryCode(this.telNum)?.regionCode;
         this.status = parseInt(attr['status']);
         this.sentTime = attr['sentTime'] || null;
         this.providerSMSID = attr['providerSMSID'];

@@ -3,8 +3,8 @@ import msg91Dataset from '../database/big-query-service';
 import { DateTime } from 'luxon';
 import { db } from '../firebase';
 import logger from '../logger/logger';
-import smsExportService from '../services/sms/sms-export-service';
-import mailExportService from '../services/email/mail-export-service';
+import smsLogsService from '../services/sms/sms-logs-service';
+import mailLogsService from '../services/email/mail-logs-service';
 import { CollectionReference } from 'firebase-admin/firestore';
 
 export enum DOWNLOAD_STATUS {
@@ -16,7 +16,7 @@ export enum DOWNLOAD_STATUS {
 
 export enum RESOURCE_TYPE {
     SMS = 'sms',
-    EMAIL = 'email'
+    EMAIL = 'mail'
 }
 
 const DOWNLOADS_COLLECTION = process.env.DOWNLOADS_COLLECTION || 'downloads'
@@ -51,9 +51,9 @@ export default class Download {
         if (fields && fields.length) this.fields = fields.splitAndTrim(',');
     }
 
-    public static index(companyId?: string) {
+    public static index(resourceType: string, companyId?: string) {
         if (companyId) {
-            return collection.where('companyId', '==', companyId).get();
+            return collection.where('companyId', '==', companyId).where('resourceType', '==', resourceType).get();
         }
 
         return collection.get();
@@ -93,9 +93,9 @@ export default class Download {
     private getQueryStatement() {
         switch (this.resourceType) {
             case RESOURCE_TYPE.EMAIL:
-                return mailExportService.getQuery(this);
+                return mailLogsService.getQuery(this.companyId, this.startDate, this.endDate, this.timezone, this.query, this.fields);
             default:
-                return smsExportService.getQuery(this);
+                return smsLogsService.getQuery(this.companyId, this.startDate, this.endDate, this.timezone, this.query, this.fields);
         }
     }
 

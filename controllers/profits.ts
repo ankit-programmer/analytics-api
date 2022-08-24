@@ -1,9 +1,7 @@
 import { Request, Response } from "express";
-import bigquery, { getQueryResults, MSG91_PROJECT_ID, MSG91_DATASET_ID } from '../database/big-query-service';
+import { getQueryResults, MSG91_PROJECT_ID, MSG91_DATASET_ID, REQUEST_DATA_TABLE_ID, REPORT_DATA_TABLE_ID } from '../database/big-query-service';
 import { DateTime } from 'luxon';
 import { getDefaultDate } from '../services/utility-service';
-import { REPORT_DATA_TABLE_ID } from '../models/report-data.model';
-import { REQUEST_DATA_TABLE_ID } from '../models/request-data.model';
 
 enum INTERVAL {
     DAILY = "daily",
@@ -29,12 +27,9 @@ const getVendorProfits = async (req: Request, res: Response) => {
         FROM \`${MSG91_PROJECT_ID}.${MSG91_DATASET_ID}.${REPORT_DATA_TABLE_ID}\`
         WHERE (sentTime BETWEEN "${startDate}" AND "${endDate}")
         GROUP BY DATE(sentTime), smsc, crcy;`
-    const [job] = await bigquery.createQueryJob({
-        query: query,
-        location: process.env.DATA_SET_LOCATION,
-        // maximumBytesBilled: "1000"
-    });
-    const [rows] = await job.getQueryResults();
+
+    const rows = await getQueryResults(query);
+
     res.send(rows.map(row => {
         return { ...row, "Date": row["Date"].value }
     }))

@@ -1,9 +1,18 @@
-import { getHashCode } from "../services/utility-service";
+import { getHashCode, getValidFields } from "../services/utility-service";
 import { Table } from '@google-cloud/bigquery';
-import msg91Dataset from '../database/big-query-service';
+import msg91Dataset, { getQueryResults, MAIL_EVENTS_TABLE_ID } from '../database/big-query-service';
+import logger from '../logger/logger';
 
-const MAIL_EVENTS_TABLE_ID = process.env.MAIL_EVENTS_TABLE_ID || 'mail_event';
 const mailEventsTable: Table = msg91Dataset.table(MAIL_EVENTS_TABLE_ID);
+const PERMITTED_FIELDS: { [key: string]: string } = {
+    requestId: 'mailEvent.requestId',
+    eventId: 'mailEvent.eventId',
+    recipientEmail: 'mailEvent.recipientEmail',
+    outboundEmailId: 'mailEvent.outboundEmailId',
+    companyId: 'mailEvent.companyId',
+    requestTime: 'STRING(mailEvent.requestTime)',
+    createdAt: 'STRING(mailEvent.createdAt)',
+};
 
 export default class MailEvent {
     requestId: string; //requestId of the mail. (Not unique in this table)	
@@ -29,5 +38,19 @@ export default class MailEvent {
     public static insertMany(rows: Array<MailEvent>) {
         const insertOptions = { skipInvalidRows: true, ignoreUnknownValues: true };
         return mailEventsTable.insert(rows, insertOptions);
+    }
+
+    public static index(companyId: string, requestId: string, filters: { [key: string]: string } = {}, fields: string[] = []) {
+        const attributes = getValidFields(PERMITTED_FIELDS, fields).withAlias.join(',');
+        let conditions = `mailEvent.requestId = '${requestId}'`;
+        if (companyId) conditions += ` AND mailEvent.companyId = '${companyId}'`;
+        if (filters.eventId) conditions += ` AND mailEvent.eventId in (${filters.eventId.splitAndTrim(',')})`;
+
+        const query = `SELECT ${attributes}
+            FROM ${MAIL_EVENTS_TABLE_ID} AS mailEvent 
+            WHERE ${conditions}`;
+
+        logger.info(query);
+        return getQueryResults(query);
     }
 }

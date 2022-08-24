@@ -1,7 +1,6 @@
 import { Table } from '@google-cloud/bigquery';
-import msg91Dataset from '../database/big-query-service';
+import msg91Dataset, { REQUEST_DATA_TABLE_ID } from '../database/big-query-service';
 
-export const REQUEST_DATA_TABLE_ID = process.env.REQUEST_DATA_TABLE_ID || 'request_data'
 const requestDataTable: Table = msg91Dataset.table(REQUEST_DATA_TABLE_ID);
 
 export default class RequestData {

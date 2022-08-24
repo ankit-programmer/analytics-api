@@ -3,7 +3,8 @@ import { isValidObjectId } from '../services/utility-service';
 
 export enum jobType {
     REQUEST_DATA = 'requestData',
-    REPORT_DATA = 'reportData'
+    REPORT_DATA = 'reportData',
+    OTP_REPORT = 'otpReport'
 };
 
 const Tracker = sequelize.define("Tracker", {

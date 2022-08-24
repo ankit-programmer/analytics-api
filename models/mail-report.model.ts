@@ -1,8 +1,7 @@
 import { Table } from '@google-cloud/bigquery';
-import msg91Dataset from '../database/big-query-service';
+import msg91Dataset, { MAIL_REP_TABLE_ID } from '../database/big-query-service';
 import { getHashCode } from "../services/utility-service";
 
-export const MAIL_REP_TABLE_ID = process.env.MAIL_REP_TABLE_ID || 'mail_report';
 const mailReportTable: Table = msg91Dataset.table(MAIL_REP_TABLE_ID);
 
 export default class MailReport {

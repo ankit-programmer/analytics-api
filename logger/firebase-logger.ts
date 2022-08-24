@@ -17,7 +17,7 @@ class FirebaseLogger {
         logger.error('[ERROR] Logging errors in firestore...');
         const batch = db.batch();
         const collection: CollectionReference = db.collection(collectionName);
-        errors.forEach((error: any) => batch.set(collection.doc(), error));
+        errors.forEach((error: any) => batch.set(collection.doc(), JSON.parse(JSON.stringify(error))));
         return batch.commit();
     }
 }

@@ -3,8 +3,8 @@ import * as downloadsController from '../controllers/downloads';
 
 const router = express.Router();
 
-router.post(/^\/(sms|email)/, downloadsController.downloadCsv);
+router.post(/^\/(sms|mail)/, downloadsController.downloadCsv);
 
-router.get('/:resourceType', downloadsController.getDownloadLinks);
+router.get(/^\/(sms|mail)/, downloadsController.getDownloadLinks);
 
 export default router;

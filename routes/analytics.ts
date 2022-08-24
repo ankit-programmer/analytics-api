@@ -1,11 +1,9 @@
 import express, { Request, Response } from 'express';
-import bigquery, { getQueryResults, MSG91_PROJECT_ID, MSG91_DATASET_ID } from '../database/big-query-service';
+import bigquery, { getQueryResults, MSG91_PROJECT_ID, MSG91_DATASET_ID, REPORT_DATA_TABLE_ID, REQUEST_DATA_TABLE_ID, MSG91_DATA_SET_LOCATION } from '../database/big-query-service';
 import { DateTime } from 'luxon';
 import logger from "../logger/logger";
 import smsAnalyticsService from "../services/sms/sms-analytics-service";
 import { formatDate, getDefaultDate, getQuotedStrings } from '../services/utility-service';
-import { REQUEST_DATA_TABLE_ID } from '../models/request-data.model';
-import { REPORT_DATA_TABLE_ID } from '../models/report-data.model';
 
 const router = express.Router();
 const reportQueryMap = new Map();
@@ -156,23 +154,23 @@ router.route('/users/:userId')
         }
         // const [reportDataJob] = await bigquery.createQueryJob({
         //     query: reportDataQuery,
-        //     location: process.env.DATA_SET_LOCATION,
+        //     location: MSG91_DATA_SET_LOCATION,
         //     // maximumBytesBilled: "1000"
         // });
         // const [requestDataJob] = await bigquery.createQueryJob({
         //     query: requestDataQuery,
-        //     location: process.env.DATA_SET_LOCATION,
+        //     location: MSG91_DATA_SET_LOCATION,
         //     // maximumBytesBilled: "1000"
         // });
         const [[reportDataJob], [requestDataJob]] = await Promise.all([
             bigquery.createQueryJob({
                 query: reportDataQuery,
-                location: process.env.DATA_SET_LOCATION,
+                location: MSG91_DATA_SET_LOCATION,
                 // maximumBytesBilled: "1000"
             }),
             bigquery.createQueryJob({
                 query: requestDataQuery,
-                location: process.env.DATA_SET_LOCATION,
+                location: MSG91_DATA_SET_LOCATION,
                 // maximumBytesBilled: "1000"
             })
         ]).catch(reason => {
@@ -231,7 +229,7 @@ router.route('/users/:userId/campaigns/:campaignId')
         GROUP BY DATE(requestDate), user_pid, campaign_pid;`;
         const [job] = await bigquery.createQueryJob({
             query: query,
-            location: process.env.DATA_SET_LOCATION,
+            location: MSG91_DATA_SET_LOCATION,
             // maximumBytesBilled: "1000"
         });
         let [rows] = await job.getQueryResults();
@@ -261,7 +259,7 @@ router.route('/users/:userId/campaigns')
         GROUP BY DATE(requestDate), user_pid, campaign_pid;`;
         const [job] = await bigquery.createQueryJob({
             query: query,
-            location: process.env.DATA_SET_LOCATION,
+            location: MSG91_DATA_SET_LOCATION,
             // maximumBytesBilled: "1000"
         });
         let [rows] = await job.getQueryResults();
@@ -304,12 +302,12 @@ router.route('/vendors')
         const [[reportDataJob], [requestDataJob]] = await Promise.all([
             bigquery.createQueryJob({
                 query: reportQuery,
-                location: process.env.DATA_SET_LOCATION,
+                location: MSG91_DATA_SET_LOCATION,
                 // maximumBytesBilled: "1000"
             }),
             bigquery.createQueryJob({
                 query: requestQuery,
-                location: process.env.DATA_SET_LOCATION,
+                location: MSG91_DATA_SET_LOCATION,
                 // maximumBytesBilled: "1000"
             })
         ]).catch(reason => {
@@ -340,7 +338,7 @@ router.route('/profit')
         GROUP BY DATE(sentTime), crcy;`
         const [job] = await bigquery.createQueryJob({
             query: query,
-            location: process.env.DATA_SET_LOCATION,
+            location: MSG91_DATA_SET_LOCATION,
             // maximumBytesBilled: "1000"
         });
         let [rows] = await job.getQueryResults();
@@ -362,7 +360,7 @@ router.route('/profit/users/:userId')
         GROUP BY DATE(sentTime), user_pid;`
         const [job] = await bigquery.createQueryJob({
             query: query,
-            location: process.env.DATA_SET_LOCATION,
+            location: MSG91_DATA_SET_LOCATION,
             // maximumBytesBilled: "1000"
         });
         let [rows] = await job.getQueryResults();
@@ -386,7 +384,7 @@ router.route('/profit/vendors')
         GROUP BY DATE(sentTime), smsc, crcy;`
         const [job] = await bigquery.createQueryJob({
             query: query,
-            location: process.env.DATA_SET_LOCATION,
+            location: MSG91_DATA_SET_LOCATION,
             // maximumBytesBilled: "1000"
         });
         let [rows] = await job.getQueryResults();

@@ -1,5 +1,8 @@
+import { uniq } from 'lodash';
 import { DateTime } from 'luxon';
 import { ObjectId } from 'mongodb';
+
+const DEFAULT_DATE_FORMAT = 'yyyy-MM-dd';
 const Hashes = require('jshashes');
 const phoneUtil = require('google-libphonenumber').PhoneNumberUtil.getInstance();
 
@@ -13,11 +16,11 @@ function delay(time = 1000) {
 
 function formatDate(date: string) {
     try {
-        const result = DateTime.fromFormat(date, 'yyyy-MM-dd');
+        const result = DateTime.fromFormat(date, DEFAULT_DATE_FORMAT);
         if (result?.isValid) return result;
-        throw 'Date must be provided in yyyy-MM-dd format';
+        throw `Date must be provided in '${DEFAULT_DATE_FORMAT}' format`;
     } catch (err) {
-        throw 'Date must be provided in yyyy-MM-dd format';
+        throw `Date must be provided in '${DEFAULT_DATE_FORMAT}' format`;
     }
 }
 
@@ -31,7 +34,7 @@ function getValidFields(permittedFields: { [key: string]: string } = {}, fields:
     let attrbs = fields.filter(field => field in permittedFields);
     if (!attrbs.length) attrbs = Object.keys(permittedFields);
 
-    attrbs.forEach(key => {
+    uniq(attrbs).forEach(key => {
         result.withAlias.push(`${permittedFields[key]} as ${key}`);
         result.withoutAlias.push(permittedFields[key]);
         result.onlyAlias.push(key);
@@ -57,11 +60,11 @@ function extractCountryCode(mobileNumber: string) {
 
     try {
         const parsedNum = phoneUtil.parseAndKeepRawInput(`+${mobileNumber}`);
-        if (!phoneUtil.isValidNumber(parsedNum)) throw 'UNKNOWN';
+        if (!phoneUtil.isValidNumber(parsedNum)) throw '0';
         regionCode = phoneUtil.getRegionCodeForNumber(parsedNum);
         countryCode = parsedNum.getCountryCode();
     } catch (err) {
-        regionCode = 'UNKNOWN';
+        regionCode = null;
         countryCode = '0';
     }
 
@@ -72,8 +75,8 @@ function getDefaultDate(dayDiff: number = 7): { from: string, to: string } {
     const today = DateTime.now();
 
     return {
-        from: today.minus({ days: dayDiff }).toFormat('yyyy-MM-dd'),
-        to: today.toFormat('yyyy-MM-dd')
+        from: today.minus({ days: dayDiff }).toFormat(DEFAULT_DATE_FORMAT),
+        to: today.toFormat(DEFAULT_DATE_FORMAT)
     };
 }
 

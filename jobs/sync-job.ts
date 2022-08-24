@@ -7,17 +7,19 @@ import { DateTime } from 'luxon';
 import ReportData from '../models/report-data.model';
 import RequestData from '../models/request-data.model';
 import Tracker, { jobType } from "../models/trackers.model";
+import OtpModel from "../models/otp-model";
 
 let mongoConnection: MongoClient;
 const REQUEST_DATA_COLLECTION = process.env.REQUEST_DATA_COLLECTION || '';
 const REPORT_DATA_COLLECTION = process.env.REPORT_DATA_COLLECTION || '';
-const DELAY_INTERVAL = 30 * 1000; // in secs
-const MONGO_DOCS_LIMIT = 10000;
-const BATCH_SIZE = 1000;
-const LAG = 15;  // Minutes
+const OTP_REPORT_COLLECTION = process.env.OTP_REPORT_COLLECTION || '';
+const DELAY_INTERVAL = +(process.env.DELAY_INTERVAL || 30) * 1000; // in secs
+const MONGO_DOCS_LIMIT = +(process.env.MONGO_DOCS_LIMIT || 10000);
+const BATCH_SIZE = +(process.env.BATCH_SIZE || 1000);
+const LAG = +(process.env.SYNC_LAG || 48 * 60);  // Hours * Minutes
 
 async function initSynching(job: jobType) {
-    logger.info(`MONGO_DOCS_LIMIT: ${MONGO_DOCS_LIMIT} | BATCH_SIZE: ${BATCH_SIZE} | DELAY_INTERVAL: ${DELAY_INTERVAL}`);
+    logger.info(`MONGO_DOCS_LIMIT: ${MONGO_DOCS_LIMIT} | BATCH_SIZE: ${BATCH_SIZE} | DELAY_INTERVAL: ${DELAY_INTERVAL}sec | LAG: ${LAG}min`);
 
     while (true) {
         try {
@@ -57,6 +59,7 @@ async function insertBatchInBigQuery(job: jobType, batch: any[]) {
     try {
         if (job === jobType.REQUEST_DATA) await RequestData.insertMany(batch.map(doc => new RequestData(doc)));
         if (job === jobType.REPORT_DATA) await ReportData.insertMany(batch.map(doc => new ReportData(doc)));
+        if (job === jobType.OTP_REPORT) await OtpModel.insertMany(batch.map(doc => new OtpModel(doc)));
     } catch (err: any) {
         if (err.name !== 'PartialFailureError') throw err;
         logger.error(`[JOB](insertBatchInBigQuery) PartialFailureError`);
@@ -71,6 +74,7 @@ async function fetchDocsFromMongo(job: jobType): Promise<any[]> {
         if (!tracker?.lastDocumentId) throw 'lastDocumentId is required.';
         if (job === jobType.REQUEST_DATA) return fetchRequestDataDocs(maxEndTime(), tracker.lastDocumentId);
         if (job === jobType.REPORT_DATA) return fetchReportDataDocs(maxEndTime(), tracker.lastDocumentId);
+        if (job === jobType.OTP_REPORT) return fetchOtpReportDocs(maxEndTime(), tracker.lastDocumentId);
         return Promise.resolve([]);
     } catch (err: any) {
         logger.error(err);
@@ -106,6 +110,18 @@ function fetchReportDataDocs(maxEndTime: DateTime, lastDocumentId: string) {
     return collection.find(query).limit(MONGO_DOCS_LIMIT).sort({ requestDate: 1 }).toArray();
 }
 
+function fetchOtpReportDocs(maxEndTime: DateTime, lastDocumentId: string) {
+    const query = {
+        _id: { $gt: new ObjectId(lastDocumentId) },
+        sentTimeReport: { $lte: maxEndTime }
+    }
+
+    logger.info(`[MONGO] Fetching docs...`);
+    logger.info(`[MONGO] Query - ${JSON.stringify(query)}`);
+    const collection = mongoConnection.db().collection(OTP_REPORT_COLLECTION);
+    return collection.find(query).limit(MONGO_DOCS_LIMIT).sort({ requestDate: 1 }).toArray();
+}
+
 function maxEndTime() {
     return DateTime.now().minus({ minutes: LAG });
 }
@@ -114,7 +130,6 @@ function initTrackers(job: jobType, lastDocumentId: string, forceReplace: boolea
     if (!lastDocumentId) return;
     logger.info(`[UPDATE TRACKERS] Updating lastDocumentId to ${lastDocumentId}...`);
     if (forceReplace) return Tracker.upsert({ jobType: job, lastDocumentId });
-    logger.info(`[INIT TRACKERS] Updating lastDocumentId to ${lastDocumentId}...`);
     return Tracker.create({ jobType: job, lastDocumentId });
 }
 
@@ -135,8 +150,10 @@ async function start(job: jobType, args: any) {
 
 const requestDataSyncJob = (args: any) => start(jobType.REQUEST_DATA, args);
 const reportDataSyncJob = (args: any) => start(jobType.REPORT_DATA, args);
+const otpReportSyncJob = (args: any) => start(jobType.OTP_REPORT, args);
 
 export {
     requestDataSyncJob,
-    reportDataSyncJob
+    reportDataSyncJob,
+    otpReportSyncJob
 };
